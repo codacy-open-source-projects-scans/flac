@@ -1,6 +1,6 @@
 /* metaflac - Command-line FLAC metadata editor
  * Copyright (C) 2001-2009  Josh Coalson
- * Copyright (C) 2011-2023  Xiph.Org Foundation
+ * Copyright (C) 2011-2024  Xiph.Org Foundation
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -758,7 +758,7 @@ void write_metadata(const char *filename, FLAC__StreamMetadata *block, unsigned 
 								flac_printf("%c",block->data.application.data[i]);
 							else {
 								char replacement[4] = {0xef, 0xbf, 0xbd, 0}; /* Unicode replacement character */
-								flac_printf(replacement);
+								flac_printf("%s",replacement);
 							}
 						}
 			}
