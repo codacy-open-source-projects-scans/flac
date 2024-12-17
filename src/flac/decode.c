@@ -349,9 +349,7 @@ FLAC__bool DecoderSession_init_decoder(DecoderSession *decoder_session, const ch
 				return false;
 			}
 		}
-		fseek(f, -128, SEEK_END); /* Do not check for errors, because it could be that file is less than 128 bytes long */
-		fread(buffer, 1, 3, f);
-		if(memcmp(buffer, "TAG", 3) == 0){
+		if(fseek(f, -128, SEEK_END) == 0 && fread(buffer, 1, 3, f) == 3 && memcmp(buffer, "TAG", 3) == 0){
 			flac__utils_printf(stderr, 1, "%s: NOTE, found something that looks like an ID3v1 tag. If decoding returns an error, this ID3v1 tag is probably the cause.\n", decoder_session->inbasefilename);
 		}
 		fclose(f);
@@ -778,7 +776,7 @@ FLAC__bool write_iff_headers(FILE *f, DecoderSession *decoder_session, FLAC__uin
 	else if(format == FORMAT_AIFF)
 		iff_size = 46 + foreign_metadata_size + aligned_data_size;
 	else /* AIFF-C */
-		iff_size = 16 + foreign_metadata_size + aligned_data_size + (fm?fm->aifc_comm_length:0);
+		iff_size = 16 + foreign_metadata_size + aligned_data_size + (fm?fm->aifc_comm_length:36);
 
 	if(format != FORMAT_WAVE64 && format != FORMAT_RF64 && iff_size >= 0xFFFFFFF4) {
 		flac__utils_printf(stderr, 1, "%s: ERROR: stream is too big to fit in a single %s file\n", decoder_session->inbasefilename, fmt_desc);

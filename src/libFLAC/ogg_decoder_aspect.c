@@ -146,15 +146,15 @@ static FLAC__OggDecoderAspectReadStatus process_page_(FLAC__OggDecoderAspect *as
 
 static FLAC__bool check_size_of_link_allocation_(FLAC__OggDecoderAspect *aspect)
 {
-	/* reallocate in chunks of 4 */
+	/* double on reallocating */
 	if(aspect->current_linknumber >= aspect->number_of_links_allocated || aspect->current_linknumber_advance_read >= aspect->number_of_links_allocated) {
 		FLAC__OggDecoderAspect_LinkDetails * tmpptr = NULL;
-		if(NULL == (tmpptr = safe_realloc_nofree_mul_2op_(aspect->linkdetails,4+aspect->number_of_links_allocated,sizeof(FLAC__OggDecoderAspect_LinkDetails)))) {
+		if(NULL == (tmpptr = safe_realloc_nofree_mul_2op_(aspect->linkdetails,2*aspect->number_of_links_allocated,sizeof(FLAC__OggDecoderAspect_LinkDetails)))) {
 			return false;
 		}
 		aspect->linkdetails = tmpptr;
-		memset(aspect->linkdetails + aspect->number_of_links_allocated, 0, 4 * sizeof(FLAC__OggDecoderAspect_LinkDetails));
-		aspect->number_of_links_allocated += 4;
+		memset(aspect->linkdetails + aspect->number_of_links_allocated, 0, aspect->number_of_links_allocated * sizeof(FLAC__OggDecoderAspect_LinkDetails));
+		aspect->number_of_links_allocated *= 2;
 	}
 	return true;
 }
@@ -454,6 +454,11 @@ FLAC__OggDecoderAspectReadStatus FLAC__ogg_decoder_aspect_skip_link(FLAC__OggDec
 	if(seek_callback == NULL || tell_callback == NULL || length_callback == NULL)
 		return FLAC__OGG_DECODER_ASPECT_READ_STATUS_CALLBACKS_NONFUNCTIONAL;
 
+	/* This extra check is here, because allocation failures while reading cannot always be
+	 * properly passed down the chain with the current API. So, instead, check again */
+	if(!check_size_of_link_allocation_(aspect))
+		return FLAC__OGG_DECODER_ASPECT_READ_STATUS_MEMORY_ALLOCATION_ERROR;
+
 	if(aspect->current_linknumber < aspect->number_of_links_indexed) {
 		if(aspect->linkdetails[aspect->current_linknumber].is_last) {
 			/* Seek to end of stream */
@@ -641,8 +646,14 @@ FLAC__OggDecoderAspectReadStatus FLAC__ogg_decoder_aspect_skip_link(FLAC__OggDec
 						/* We read from the left_pos but found nothing interesting, so we can move left_pos up */
 						left_pos = current_pos;
 					}
-					else if(did_a_seek)
-						right_pos = page_pos;
+					else if(did_a_seek) {
+						if(right_pos <= page_pos) {
+							/* Ended up somewhere we've already been */
+							seek_to_left_pos = true;
+						}
+						else
+							right_pos = page_pos;
+					}
 					else {
 						/* Read forward but found an unknown serial number */
 						return FLAC__OGG_DECODER_ASPECT_READ_STATUS_ERROR;
@@ -654,7 +665,7 @@ FLAC__OggDecoderAspectReadStatus FLAC__ogg_decoder_aspect_skip_link(FLAC__OggDec
 							return FLAC__OGG_DECODER_ASPECT_READ_STATUS_LOST_SYNC;
 						aspect->current_linknumber--;
 						aspect->linkdetails[aspect->current_linknumber].is_last = true;
-						return FLAC__OGG_DECODER_ASPECT_READ_STATUS_OK;
+						return FLAC__OGG_DECODER_ASPECT_READ_STATUS_END_OF_STREAM;
 					}
 					else {
 						/* We can end up here for three reasons:
@@ -674,6 +685,10 @@ FLAC__OggDecoderAspectReadStatus FLAC__ogg_decoder_aspect_skip_link(FLAC__OggDec
 								return FLAC__OGG_DECODER_ASPECT_READ_STATUS_OK;
 							}
 							find_bos_twice = false;
+						}
+						if(!aspect->beginning_of_link) {
+							/* Done scanning BOS pages, move up left_pos */
+							left_pos = page_pos;
 						}
 					}
 				}
