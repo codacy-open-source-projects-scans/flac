@@ -1,6 +1,6 @@
 #  FLAC - Free Lossless Audio Codec
 #  Copyright (C) 2001-2009  Josh Coalson
-#  Copyright (C) 2011-2024  Xiph.Org Foundation
+#  Copyright (C) 2011-2025  Xiph.Org Foundation
 #
 #  This file is part the FLAC project.  FLAC is comprised of several
 #  components distributed under different licenses.  The codec libraries
@@ -20,7 +20,7 @@
 # instead of FLAC__ since autoconf triggers off 'AC_' in strings
 
 AC_PREREQ(2.60)
-AC_INIT([flac],[1.4.3],[flac-dev@xiph.org],[flac],[https://www.xiph.org/flac/])
+AC_INIT([flac],[1.5.0],[flac-dev@xiph.org],[flac],[https://www.xiph.org/flac/])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_SRCDIR([src/flac/main.c])
 AC_CONFIG_MACRO_DIR([m4])
@@ -53,7 +53,7 @@ AM_PROG_CC_C_O
 AC_C_INLINE
 AC_C_TYPEOF
 
-AC_CHECK_HEADERS([stdint.h stdbool.h inttypes.h byteswap.h sys/auxv.h sys/param.h sys/ioctl.h sys/time.h termios.h x86intrin.h cpuid.h arm_neon.h])
+AC_CHECK_HEADERS([stdint.h stdbool.h inttypes.h byteswap.h sys/auxv.h sys/param.h sys/ioctl.h sys/time.h termios.h x86intrin.h cpuid.h arm_neon.h threads.h])
 
 if test "x$ac_cv_header_stdint_h" != xyes -o "x$ac_cv_header_stdbool_h" != xyes; then
 AC_MSG_ERROR("Header stdint.h and/or stdbool.h not found")
@@ -296,7 +296,7 @@ if test "x$enable_doxygen_docs" != xfalse ; then
 fi
 AM_CONDITIONAL(FLaC__HAS_DOXYGEN, test -n "$DOXYGEN")
 
-if test ! -n "$DOXYGEN" && test -f "$srcdir/doc/FLAC.tag" && test -f "$srcdir/doc/api/modules.html" ; then
+if test ! -n "$DOXYGEN" && test -f "$srcdir/doc/FLAC.tag" && test -f "$srcdir/doc/api/topics.html" ; then
 	HAS_PREBUILT_DOXYGEN=yes
 fi
 AM_CONDITIONAL(FLaC__HAS_PREBUILT_DOXYGEN, test "x$HAS_PREBUILT_DOXYGEN" = xyes)
@@ -373,21 +373,31 @@ AC_ARG_ENABLE([version-from-git],
 
 dnl Build with multithreading?
 AC_ARG_ENABLE([multithreading],
-	AS_HELP_STRING([--disable-multithreading], [Disable multithreading in libFLAC]))
+	AS_HELP_STRING([--enable-multithreading=yes|pthread|c11threads|no], [Enable multithreading in libFLAC. When not specifying pthread or c11threads, configure will use pthread if available (default: yes)]))
 
 HAVE_PTHREAD=no
+HAVE_C11THREADS=no
+
 if test "x$enable_multithreading" != "xno" ; then
-	AX_PTHREAD([
-		HAVE_PTHREAD=yes
-		AC_DEFINE(HAVE_PTHREAD,1,[Define if pthread is enabled])
-		LIBS="$PTHREAD_LIBS $LIBS"
-		CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
-		CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
-		CC="$PTHREAD_CC"
-		CXX="$PTHREAD_CXX"
-		],[HAVE_PTHREAD=no])
-	if test "x${HAVE_PTHREAD}" == "xno"; then
-		AC_MSG_WARN("pthread support, needed for multithreading, is not found")
+	if test "x$enable_multithreading" != "xc11threads" ; then
+		AX_PTHREAD([
+			HAVE_PTHREAD=yes
+			AC_DEFINE([HAVE_PTHREAD],1,[Define if multithreading is enable and pthread is available])
+			LIBS="$PTHREAD_LIBS $LIBS"
+			CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+			CXXFLAGS="$CXXFLAGS $PTHREAD_CFLAGS"
+			CC="$PTHREAD_CC"
+			CXX="$PTHREAD_CXX"
+			],[HAVE_PTHREAD=no])
+	else
+		HAVE_PTHREAD=no
+	fi
+	if test "x$enable_multithreading" != "xpthread" -a "x${HAVE_PTHREAD}" = "xno" -a "x$ac_cv_header_threads_h" = "xyes"; then
+		HAVE_C11THREADS=yes
+		AC_DEFINE([HAVE_C11THREADS],1,[Define if multithreading is enable and <threads.h> is available])
+	fi
+	if test "x${HAVE_PTHREAD}" = "xno" -a "x${HAVE_C11THREADS}" = "xno"; then
+		AC_MSG_WARN("pthread or C11 threads support, needed for multithreading, are not found")
 	fi
 fi
 
@@ -512,7 +522,7 @@ AC_CHECK_PROG(GIT_FOUND,git,yes)
 
 if test x$GIT_FOUND$enable_version_from_git = "xyesyes"; then
 	GIT_COMMIT_TAG=`git -C $srcdir --git-dir=.git describe --tags --exact-match 2>/dev/null`
-	GIT_COMMIT_HASH=`git -C $srcdir --git-dir=.git log -1 --pretty=format:%h 2>/dev/null`
+	GIT_COMMIT_HASH=`git -C $srcdir --git-dir=.git log -1 --pretty=format:%H 2>/dev/null | head -c 8`
 	GIT_COMMIT_DATE=`git -C $srcdir --git-dir=.git log -1 --pretty=format:%cd --date=format:%Y%m%d 2>/dev/null`
 	if test ${#GIT_COMMIT_HASH} = 8 && test ${#GIT_COMMIT_DATE} = 8; then
 		GIT_COMMIT_VERSION_AVAIL=yes
@@ -616,7 +626,13 @@ fi
 	echo "    Compiler is Clang : ....................... ${xiph_cv_c_compiler_clang}"
 	echo "    Asm optimizations : ....................... ${asm_optimisation}"
 	echo "    Ogg/FLAC support : ........................ ${have_ogg}"
-	echo "    Multithreading   : ........................ ${HAVE_PTHREAD}"
+if test "x${HAVE_C11THREADS}" = "xyes" ; then
+	echo "    Multithreading   : ........................ C11 threads"
+elif test "x${HAVE_PTHREAD}" = "xyes" ; then
+	echo "    Multithreading   : ........................ pthread"
+else
+	echo "    Multithreading   : ........................ no"
+fi
 	echo "    Stack protector  : ........................ ${enable_stack_smash_protection}"
 	echo "    Fuzzing support (Clang only) : ............ ${have_oss_fuzzers}"
 echo

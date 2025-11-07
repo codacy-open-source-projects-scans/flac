@@ -1,6 +1,6 @@
 /* libFLAC - Free Lossless Audio Codec
  * Copyright (C) 2002-2009  Josh Coalson
- * Copyright (C) 2011-2024  Xiph.Org Foundation
+ * Copyright (C) 2011-2025  Xiph.Org Foundation
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -89,7 +89,7 @@ static FLAC__OggDecoderAspectReadStatus process_page_(FLAC__OggDecoderAspect *as
 		/* Check whether not FLAC. The next if is somewhat confusing: check
 		 * whether the length of the next page body agrees with the length
 		 * of a FLAC 'header' possibly contained in that page */
-		if(aspect->working_page.body_len > 1 + FLAC__OGG_MAPPING_MAGIC_LENGTH &&
+		if(aspect->working_page.body_len > (long)(1 + FLAC__OGG_MAPPING_MAGIC_LENGTH) &&
 		   aspect->working_page.body[0] == FLAC__OGG_MAPPING_FIRST_HEADER_PACKET_TYPE &&
 		   memcmp((&aspect->working_page.body) + 1, FLAC__OGG_MAPPING_MAGIC, FLAC__OGG_MAPPING_MAGIC_LENGTH)) {
 			aspect->bos_flag_seen = true;
@@ -696,6 +696,10 @@ FLAC__OggDecoderAspectReadStatus FLAC__ogg_decoder_aspect_skip_link(FLAC__OggDec
 			else if(aspect->end_of_stream) {
 				if(aspect->beginning_of_link && !aspect->bos_flag_seen) {
 					/* We were looking for the next link, but found end of stream instead */
+					if(aspect->current_linknumber == 0)
+						return FLAC__OGG_DECODER_ASPECT_READ_STATUS_LOST_SYNC;
+					aspect->current_linknumber--;
+					aspect->linkdetails[aspect->current_linknumber].is_last = true;
 					return FLAC__OGG_DECODER_ASPECT_READ_STATUS_END_OF_STREAM;
 				}
 				else if(did_a_seek) {

@@ -1,6 +1,6 @@
 /* metaflac - Command-line FLAC metadata editor
  * Copyright (C) 2001-2009  Josh Coalson
- * Copyright (C) 2011-2024  Xiph.Org Foundation
+ * Copyright (C) 2011-2025  Xiph.Org Foundation
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -104,7 +104,7 @@ FLAC__bool do_operations(const CommandLineOptions *options)
 
 void show_version(void)
 {
-	printf("metaflac %s\n", FLAC__VERSION_STRING);
+	flac_printf("metaflac %s\n", FLAC__VERSION_STRING);
 }
 
 FLAC__bool do_major_operation(const CommandLineOptions *options)
